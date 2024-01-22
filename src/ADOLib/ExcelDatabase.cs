@@ -12,11 +12,16 @@ namespace ADOLib
 
         public ExcelDatabase() : base() { }
 
+        /// <summary>
+        /// Provider=[Microsoft.Jet.OLEDB.4.0|Microsoft.ACE.OLEDB.12.0|Microsoft.ACE.OLEDB.16.0];
+        /// Data Source=[full file path];
+        /// Extended Properties="[Excel 8.0|Excel 12.0 Xml];HDR=[YES|NO];ReadOnly=[true|false];MaxScanRows=[8|1-16|0];[IMEX=1;]"
+        /// </summary>
         public override string GetConnectionString() {
             return "Provider=Microsoft.ACE.OLEDB.12.0;User ID=Admin;Data Source="
                 + this.FileName
                 + ";Mode=ReadWrite|Share Deny None;"
-                + "Extended Properties=\"Excel 8.0;HDR=YES;\";Jet OLEDB:System database=\"\";"
+                + "Extended Properties=\"Excel 12.0 Xml;HDR=YES;\";Jet OLEDB:System database=\"\";"
                 + "Jet OLEDB:Registry Path=\"\";Jet OLEDB:Engine Type=35;"
                 + "Jet OLEDB:Database Locking Mode=0;Jet OLEDB:Global Partial Bulk Ops=2;"
                 + "Jet OLEDB:Global Bulk Transactions=1;Jet OLEDB:Create System Database=False;"
@@ -40,19 +45,6 @@ namespace ADOLib
             DbCommand cmd = this.CreateCommand(excelTableName);
             cmd.CommandType = CommandType.TableDirect;
             this.ExecuteTable(cmd, table);
-        }
-
-        public static List<string> GetExcelSheets(string fileName) {
-            List<string> ltables = new List<string>();;
-            using (ExcelDatabase db = new ExcelDatabase()) {
-                db.FileName = fileName;
-                OleDbConnection cnn = db.Connection as OleDbConnection;
-                DataTable t = cnn.GetOleDbSchemaTable(OleDbSchemaGuid.Tables,
-                    new object[] { null, null, null, "TABLE" });
-                foreach (DataRow r in t.Rows)
-                    ltables.Add(r[2].ToString());
-            }
-            return ltables;
         }
 
         public static bool ValidateConnection(string fileName) {

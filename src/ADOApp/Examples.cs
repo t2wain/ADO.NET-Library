@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using ADOLib;
+using Microsoft.Extensions.Logging;
+using System.Data.OleDb;
 
 namespace ADOApp
 {
@@ -19,7 +21,7 @@ namespace ADOApp
 
         public void Run()
         {
-            var t = 2;
+            var t = 5;
 
             switch (t)
             {
@@ -35,6 +37,12 @@ namespace ADOApp
                     break;
                 case 3:
                     GetDataAdpater();
+                    break;
+                case 4:
+                    GetAllTables();
+                    break;
+                case 5:
+                    GetOleDbDriver();
                     break;
             }
         }
@@ -82,6 +90,16 @@ namespace ADOApp
             var t = ad.DataTable;
             var cnt = t.Rows.Count;
             _logger.LogInformation(string.Format("Return record count: {0}", cnt));
+        }
+
+        public void GetAllTables()
+        {
+            _repo.GetTables();
+        }
+
+        public void GetOleDbDriver()
+        {
+            var lst = OleDbDatabase.GetOleDbDriver();
         }
 
         public void Dispose() 

@@ -27,7 +27,7 @@ namespace ADOApp
 
         public void OpenClose()
         {
-            using var db = NewDB();
+            using var db = NewAccessDB();
             DbConnection cnn = null!;
             foreach (var idx in Enumerable.Range(0, 5))
             {
@@ -40,14 +40,14 @@ namespace ADOApp
 
         public DataTable GetTable()
         {
-            using var db = NewDB();
+            using var db = NewAccessDB();
             var sql = "select * from q_portfolio";
             return db.ExecuteTable(sql, "MyTable")!;
         }
 
         public DataTable GetTable2()
         {
-            using var db = NewDB();
+            using var db = NewAccessDB();
             using var cmd = db.CreateCommand();
             var sql = "select * from q_portfolio";
             cmd.CommandType = CommandType.Text;
@@ -62,7 +62,7 @@ namespace ADOApp
             // Cannot dispose db just yet,
             // DataReader still require connection
             // Remember to close DataReader to also close the Connection.
-            var db = NewDB(); 
+            var db = NewAccessDB(); 
             var sql = "select * from q_portfolio";
             return db.ExecuteDataReader(sql)!;
         }
@@ -74,7 +74,7 @@ namespace ADOApp
             // Cannot dispose db just yet,
             // DataReader still requires connection.
             // Remember to close DataReader to also close the Connection.
-            var db = NewDB();
+            var db = NewAccessDB();
             var sql = "select * from q_portfolio";
             using var cmd = db.CreateCommand();
             cmd.CommandType = CommandType.Text;
@@ -96,7 +96,17 @@ namespace ADOApp
             return t;
         }
 
-        public IDatabase NewDB() => _provider.GetRequiredService<IAccessDB>();
+        public void GetTables()
+        {
+            using var db = (ExcelDatabase)NewExcelDB();
+            var dv = db.GetTables();
+        }
+
+        protected IDatabase NewAccessDB() => _provider.GetRequiredService<IAccessDB>();
+
+        protected IDatabase NewExcelDB() => _provider.GetRequiredService<IExcelDB>();
+
+        protected IDatabase NewOleDB() => _provider.GetRequiredService<IOleDbOracle>();
 
         public void Dispose()
         {

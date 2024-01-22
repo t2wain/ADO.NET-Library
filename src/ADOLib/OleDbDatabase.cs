@@ -69,5 +69,26 @@ namespace ADOLib
                     p.Value = DBNull.Value;
             }
         }
+
+        public static List<string> GetOleDbDriver()
+        {
+            using var reader = OleDbEnumerator.GetRootEnumerator();
+            try
+            {
+                var list = new List<String>();
+                while (reader.Read())
+                {
+                    for (var i = 0; i < reader.FieldCount; i++)
+                    {
+                        if (reader.GetName(i) == "SOURCES_NAME")
+                        {
+                            list.Add(reader.GetValue(i).ToString());
+                        }
+                    }
+                }
+                return list;
+            }
+            finally { reader.Close(); }
+        }
     }
 }
