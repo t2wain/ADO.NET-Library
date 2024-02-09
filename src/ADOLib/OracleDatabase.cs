@@ -16,7 +16,9 @@ namespace ADOLib
 		}
 
 		public override DbCommand CreateCommand() {
-			return new OracleCommand();
+            var cmd = new OracleCommand();
+            cmd.BindByName = true;
+			return cmd;
 		}
 
 		public override DbDataAdapter CreateDataAdapter() {

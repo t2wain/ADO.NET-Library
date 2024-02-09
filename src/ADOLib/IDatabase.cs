@@ -19,12 +19,13 @@ namespace ADOLib
         
         int Execute(string sql);
         int Execute(IDbCommand cmd);
-        
+
         DataSet ExecuteDataSet(string sql, string tableName);
         DataSet ExecuteDataSet(IDbCommand cmd, string tableName);
         void ExecuteDataSet(string sql, string tableName, DataSet dataSet);
         void ExecuteDataSet(IDbCommand cmd, string tableName, DataSet dataSet);
         DataTable ExecuteProcedureSelect(IDbCommand cmd, string cursorName, string tableName);
+        object? ExecuteFunction(IDbCommand cmd, DbType returnType);
 
         DataTable ExecuteTable(string sql, string tableName);
         DataTable ExecuteTable(IDbCommand cmd, string tableName);
@@ -43,6 +44,7 @@ namespace ADOLib
         IDataParameter CreateParameter();
         IDataParameter CreateParameter(string name, object value);
         IDataParameter CreateOutParameter(string name, DbType type);
+        IDataParameter CreateReturnParameter(string name, DbType type);
 
         string ParseParamName(string paramName);
         void DeriveParameters(IDbCommand cmd);

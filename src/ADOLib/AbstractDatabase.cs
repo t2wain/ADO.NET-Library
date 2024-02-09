@@ -141,6 +141,15 @@ namespace ADOLib
             return cmd.ExecuteNonQuery();
         }
 
+        public object? ExecuteFunction(IDbCommand cmd, DbType returnType)
+        {
+            var rp = CreateReturnParameter("Return_Value", returnType);
+            cmd.Parameters.Add(rp);
+            cmd.Connection ??= this.Connection;
+            cmd.ExecuteNonQuery();
+            return rp.Value;
+        }
+
         #endregion Execute
 
         #region ExecuteDataSet
@@ -298,6 +307,15 @@ namespace ADOLib
             var p = this.CreateParameter();
             p.ParameterName = this.ParseParamName(name);
             p.Direction = ParameterDirection.Output;
+            p.DbType = type;
+            return p;
+        }
+
+        public IDataParameter CreateReturnParameter(string name, DbType type)
+        {
+            var p = this.CreateParameter();
+            p.ParameterName = this.ParseParamName(name);
+            p.Direction = ParameterDirection.ReturnValue;
             p.DbType = type;
             return p;
         }
