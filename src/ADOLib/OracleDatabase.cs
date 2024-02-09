@@ -47,15 +47,17 @@ namespace ADOLib
             return sql.Replace("@", ":");
         }
 
-        public override DataTable ExecuteProcedureSelect(IDbCommand cmd, string cursorName, string tableName) {
+        public override Task<DataTable> ExecuteProcedureSelectAsync(IDbCommand cmd, string cursorName, string tableName) {
             var p = new OracleParameter(cursorName, OracleDbType.RefCursor);
             p.Direction = ParameterDirection.Output;
             cmd.Parameters.Add(p);
-
-            using var dr = this.ExecuteDataReader(cmd).DataReader;
-            var t = new DataTable(tableName);
-            t.Load(dr!);
-            return t;
+            return ExecuteDataReaderAsync(cmd).ContinueWith(t =>
+            {
+                using var dr = t.Result;
+                var tbl = new DataTable(tableName);
+                tbl.Load(dr.DataReader!);
+                return tbl;
+            });
         }
 
         public override DbCommandBuilder CreateCommandBuilder() {

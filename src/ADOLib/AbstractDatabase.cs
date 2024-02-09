@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Configuration;
 using System.Data;
 using System.Data.Common;
+using System.Threading.Tasks;
 
 namespace ADOLib
 {
@@ -106,130 +108,204 @@ namespace ADOLib
 
         #region ExecuteDataReader
 
-        /// <summary>
-        /// Note, the underlying DB connection will also closed
-        /// when the IDataReader is closed.
-        /// </summary>
-        public DataReaderResult ExecuteDataReader(string sql) {
-            using var cmd = CreateCommand();
-            cmd.CommandText = ParseSQLParamName(sql);
-            var reader = ExecuteDataReader(cmd);
-            return reader;
-        }
+        public DataReaderResult ExecuteDataReader(string sql) =>
+            ExecuteDataReaderAsync(sql).Result;
 
         /// <summary>
         /// Note, the underlying DB connection will also closed
         /// when the IDataReader is closed.
         /// </summary>
-        public DataReaderResult ExecuteDataReader(IDbCommand cmd) {
+        public Task<DataReaderResult> ExecuteDataReaderAsync(string sql) {
+            using var cmd = CreateCommand();
+            cmd.CommandText = ParseSQLParamName(sql);
+            return ExecuteDataReaderAsync(cmd);
+        }
+
+        public DataReaderResult ExecuteDataReader(IDbCommand cmd) =>
+            ExecuteDataReaderAsync(cmd).Result;
+
+        /// <summary>
+        /// Note, the underlying DB connection will also closed
+        /// when the IDataReader is closed.
+        /// </summary>
+        public Task<DataReaderResult> ExecuteDataReaderAsync(IDbCommand cmd) {
             cmd.Connection ??= this.Connection;
-            return new(cmd.ExecuteReader(), this);
+            var me = this;
+            return ((DbCommand)cmd).ExecuteReaderAsync()
+                .ContinueWith(r => new DataReaderResult(r.Result, me));
         }
 
         #endregion ExecuteDataReader
 
         #region Execute
 
-        public int Execute(string sql) {
-            using var cmd = CreateCommand();
+        public int Execute(string sql) =>
+            ExecuteAsync(sql).Result;
+
+        public Task<int> ExecuteAsync(string sql) {
+            var cmd = CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.Execute(cmd);
+            return this.ExecuteAsync(cmd)
+                .ContinueWith(t =>
+                {
+                    cmd.Dispose();
+                    return t.Result;
+                });
         }
 
-        public int Execute(IDbCommand cmd) {
+        public int Execute(IDbCommand cmd) =>
+            ExecuteAsync(cmd).Result;
+
+
+        public Task<int> ExecuteAsync(IDbCommand cmd) {
             cmd.Connection ??= this.Connection;
-            return cmd.ExecuteNonQuery();
+            return ((DbCommand)cmd)
+                .ExecuteNonQueryAsync()
+                .ContinueWith(d => d.Result); ;
         }
 
-        public object? ExecuteFunction(IDbCommand cmd, DbType returnType)
+        public object? ExecuteFunction(IDbCommand cmd, DbType returnType) =>
+            ExecuteFunctionAsync(cmd, returnType).Result;
+
+        public Task<object?> ExecuteFunctionAsync(IDbCommand cmd, DbType returnType)
         {
             var rp = CreateReturnParameter("Return_Value", returnType);
             cmd.Parameters.Add(rp);
             cmd.Connection ??= this.Connection;
-            cmd.ExecuteNonQuery();
-            return rp.Value;
+            return ((DbCommand)cmd)
+                .ExecuteNonQueryAsync()
+                .ContinueWith(d => rp.Value);
         }
 
         #endregion Execute
 
         #region ExecuteDataSet
 
+        public DataSet ExecuteDataSet(string sql, string tableName) =>
+            ExecuteDataSetAsync(sql, tableName).Result;
+
         /// <summary>
         /// Execute a SELECT sql statement and return
         /// the data result as a table in a dataset.
         /// </summary>
-        public DataSet ExecuteDataSet(string sql, string tableName) {
-            using var cmd = this.CreateCommand();
+        public Task<DataSet> ExecuteDataSetAsync(string sql, string tableName) {
+            var cmd = this.CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.ExecuteDataSet(cmd, tableName);
+            return this.ExecuteDataSetAsync(cmd, tableName)
+                .ContinueWith(t =>
+                {
+                    cmd.Dispose();
+                    return t.Result;
+                });
         }
+
+        public DataSet ExecuteDataSet(IDbCommand cmd, string tableName) =>
+            ExecuteDataSetAsync(cmd, tableName).Result;
 
         /// <summary>
         /// Execute a SELECT command and return
         /// the data result as a table in a dataset.
         /// </summary>
-        public DataSet ExecuteDataSet(IDbCommand cmd, string tableName) {
+        public Task<DataSet> ExecuteDataSetAsync(IDbCommand cmd, string tableName) {
             var dataSet = new DataSet();
-            this.ExecuteDataSet(cmd, tableName, dataSet);
-            return dataSet;
+            return this.ExecuteDataSetAsync(cmd, tableName, dataSet).
+                ContinueWith(t => dataSet);
         }
+
+        public void ExecuteDataSet(string sql, string tableName, DataSet dataSet) =>
+            ExecuteDataSetAsync(sql, tableName, dataSet).Wait();
 
         /// <summary>
         /// Execute a SELECT sql statement and return
         /// the data result as a table in an existing dataset.
         /// </summary>
-        public void ExecuteDataSet(string sql, string tableName, DataSet dataSet) {
-            using var cmd = this.CreateCommand();
+        public Task ExecuteDataSetAsync(string sql, string tableName, DataSet dataSet) {
+            var cmd = this.CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            this.ExecuteDataSet(cmd, tableName, dataSet);
+            return this.ExecuteDataSetAsync(cmd, tableName, dataSet)
+                .ContinueWith(t => cmd.Dispose());
         }
+
+        public void ExecuteDataSet(IDbCommand cmd, string tableName, DataSet dataSet) =>
+            ExecuteDataSetAsync(cmd, tableName, dataSet);
 
         /// <summary>
         /// Execute a SELECT command and return
         /// the data result as a table in an existing dataset.
         /// </summary>
-        public void ExecuteDataSet(IDbCommand cmd, string tableName, DataSet dataSet) {
+        public Task ExecuteDataSetAsync(IDbCommand cmd, string tableName, DataSet dataSet) {
             cmd.Connection = this.Connection;
-            using var da = this.CreateDataAdapter();
+            var da = this.CreateDataAdapter();
             da.SelectCommand = (DbCommand) cmd;
             object l = dataSet.Tables.Contains(tableName) ? dataSet.Tables[tableName]! : dataSet;
             da.MissingSchemaAction = MissingSchemaAction.Add;
-            lock (l) { da.Fill(dataSet, tableName); }
+            return Task.Run(() =>
+            {
+                lock (l) { da.Fill(dataSet, tableName); }
+                da.Dispose();
+            });
+
         }
 
-        public virtual DataTable ExecuteProcedureSelect(IDbCommand cmd, string cursorName, string tableName) {
+        public virtual DataTable ExecuteProcedureSelect(IDbCommand cmd, string cursorName, string tableName) =>
+            ExecuteProcedureSelectAsync(cmd, cursorName, tableName).Result;
+
+        public virtual Task<DataTable> ExecuteProcedureSelectAsync(IDbCommand cmd, string cursorName, string tableName)
+        {
             throw new NotImplementedException();
         }
+
 
         #endregion ExecuteDataSet
 
         #region ExecuteTable
 
-        public DataTable ExecuteTable(string sql, string tableName) {
-            using var cmd = this.CreateCommand();
-            cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.ExecuteTable(cmd, tableName);
-            
-        }
+        public DataTable ExecuteTable(string sql, string tableName) =>
+            ExecuteTableAsync(sql, tableName).Result;
 
-        public DataTable ExecuteTable(IDbCommand cmd, string tableName) {
-            var table = new DataTable();
-            this.ExecuteTable(cmd, table);
-            return table;
-        }
-
-        public void ExecuteTable(string sql, DataTable table) {
+        public Task<DataTable> ExecuteTableAsync(string sql, string tableName) {
             var cmd = this.CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            this.ExecuteTable(cmd, table);
+            return this.ExecuteTableAsync(cmd, tableName)
+                .ContinueWith(t =>
+                {
+                    cmd.Dispose();
+                    return t.Result;
+                });
         }
 
-        public void ExecuteTable(IDbCommand cmd, DataTable table) {
+        public DataTable ExecuteTable(IDbCommand cmd, string tableName) =>
+            ExecuteTableAsync(cmd, tableName).Result;
+
+        public Task<DataTable> ExecuteTableAsync(IDbCommand cmd, string tableName) {
+            var table = new DataTable();
+            return this.ExecuteTableAsync(cmd, table)
+                .ContinueWith(t => table);
+        }
+
+        public void ExecuteTable(string sql, DataTable table) =>
+            this.ExecuteTableAsync(sql, table).Wait();
+
+        public Task ExecuteTableAsync(string sql, DataTable table) {
+            var cmd = this.CreateCommand();
+            cmd.CommandText = this.ParseSQLParamName(sql);
+            return this.ExecuteTableAsync(cmd, table)
+                .ContinueWith(t => cmd.Dispose());
+        }
+
+        public void ExecuteTable(IDbCommand cmd, DataTable table) =>
+            ExecuteTableAsync(cmd, table).Wait();
+
+        public Task ExecuteTableAsync(IDbCommand cmd, DataTable table) {
             cmd.Connection = this.Connection;
-            using var da = this.CreateDataAdapter();
+            var da = this.CreateDataAdapter();
             da.SelectCommand = (DbCommand)cmd;
             da.MissingSchemaAction = MissingSchemaAction.Add;
-            lock (table) { da.Fill(table); }
+            return Task.Run(() => 
+            {
+                lock (table) { da.Fill(table); }
+                da.Dispose();
+            });
         }
 
         #endregion

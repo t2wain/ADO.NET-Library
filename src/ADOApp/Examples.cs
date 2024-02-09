@@ -21,7 +21,7 @@ namespace ADOApp
 
         public void Run()
         {
-            var t = 5;
+            var t = 2;
 
             switch (t)
             {
