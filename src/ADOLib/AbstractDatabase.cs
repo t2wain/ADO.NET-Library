@@ -247,15 +247,6 @@ namespace ADOLib
 
         }
 
-        public virtual DataTable ExecuteProcedureSelect(IDbCommand cmd, string cursorName, string tableName) =>
-            ExecuteProcedureSelectAsync(cmd, cursorName, tableName).Result;
-
-        public virtual Task<DataTable> ExecuteProcedureSelectAsync(IDbCommand cmd, string cursorName, string tableName)
-        {
-            throw new NotImplementedException();
-        }
-
-
         #endregion ExecuteDataSet
 
         #region ExecuteTable
@@ -394,6 +385,11 @@ namespace ADOLib
             p.Direction = ParameterDirection.ReturnValue;
             p.DbType = type;
             return p;
+        }
+
+        public virtual IDataParameter CreateRefCursorParameter(string name)
+        {
+            throw new NotImplementedException();
         }
 
         public virtual string ParseParamName(string paramName) {

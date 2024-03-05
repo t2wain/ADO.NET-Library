@@ -32,8 +32,6 @@ namespace ADOLib
         void ExecuteDataSet(string sql, string tableName, DataSet dataSet);
         Task ExecuteDataSetAsync(string sql, string tableName, DataSet dataSet);
         void ExecuteDataSet(IDbCommand cmd, string tableName, DataSet dataSet);
-        DataTable ExecuteProcedureSelect(IDbCommand cmd, string cursorName, string tableName);
-        Task<DataTable> ExecuteProcedureSelectAsync(IDbCommand cmd, string cursorName, string tableName);
         object? ExecuteFunction(IDbCommand cmd, DbType returnType);
         Task<object?> ExecuteFunctionAsync(IDbCommand cmd, DbType returnType);
 
@@ -59,6 +57,7 @@ namespace ADOLib
         IDataParameter CreateParameter(string name, object value);
         IDataParameter CreateOutParameter(string name, DbType type);
         IDataParameter CreateReturnParameter(string name, DbType type);
+        IDataParameter CreateRefCursorParameter(string name);
 
         string ParseParamName(string paramName);
         void DeriveParameters(IDbCommand cmd);

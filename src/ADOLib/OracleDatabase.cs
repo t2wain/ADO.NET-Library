@@ -4,10 +4,17 @@ using System.Data.Common;
 
 namespace ADOLib
 {
+    public interface IOracleDatabase
+    {
+        IDataParameter CreateParameter(string name, OracleDbType type);
+        IDataParameter CreateOutParameter(string name, OracleDbType type);
+        IDataParameter CreateReturnParameter(string name, OracleDbType type);
+    }
+
     /// <summary>
     /// Using Oracle ODP.NET data providers
     /// </summary>
-    public abstract class OracleDatabase : AbstractDatabase {
+    public abstract class OracleDatabase : AbstractDatabase, IOracleDatabase {
 
         protected OracleDatabase() : base() { }
 
@@ -39,25 +46,21 @@ namespace ADOLib
             return new OracleParameter();
         }
 
+        public override IDataParameter CreateRefCursorParameter(string name)
+        {
+            var p = new OracleParameter();
+            p.ParameterName = this.ParseParamName(name);
+            p.Direction = ParameterDirection.Output;
+            p.OracleDbType = OracleDbType.RefCursor;
+            return p;
+        }
+
         public override string ParseParamName(string paramName) {
             return paramName.Replace("@", ":");
         }
 
         public override string ParseSQLParamName(string sql) {
             return sql.Replace("@", ":");
-        }
-
-        public override Task<DataTable> ExecuteProcedureSelectAsync(IDbCommand cmd, string cursorName, string tableName) {
-            var p = new OracleParameter(cursorName, OracleDbType.RefCursor);
-            p.Direction = ParameterDirection.Output;
-            cmd.Parameters.Add(p);
-            return ExecuteDataReaderAsync(cmd).ContinueWith(t =>
-            {
-                using var dr = t.Result;
-                var tbl = new DataTable(tableName);
-                tbl.Load(dr.DataReader!);
-                return tbl;
-            });
         }
 
         public override DbCommandBuilder CreateCommandBuilder() {
@@ -90,6 +93,36 @@ namespace ADOLib
         public override string GetCommonParamName(string paramName) {
             return paramName.Replace(":", "");
         }
+
+        #region IOracleDatabase
+
+        public IDataParameter CreateParameter(string name, OracleDbType type)
+        {
+            var p = new OracleParameter();
+            p.ParameterName = this.ParseParamName(name);
+            p.OracleDbType = type;
+            return p;
+        }
+
+        public IDataParameter CreateOutParameter(string name, OracleDbType type)
+        {
+            var p = new OracleParameter();
+            p.ParameterName = this.ParseParamName(name);
+            p.Direction = ParameterDirection.Output;
+            p.OracleDbType = type;
+            return p;
+        }
+
+        public IDataParameter CreateReturnParameter(string name, OracleDbType type)
+        {
+            var p = new OracleParameter();
+            p.ParameterName = this.ParseParamName(name);
+            p.Direction = ParameterDirection.ReturnValue;
+            p.OracleDbType = type;
+            return p;
+        }
+
+        #endregion
     }
 
 }
