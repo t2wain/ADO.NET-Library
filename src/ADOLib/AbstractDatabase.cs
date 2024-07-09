@@ -37,12 +37,12 @@ namespace ADOLib
         /// </summary>
         public string ConnectionString {
             get {
-                if (this._connString == String.Empty) 
+                if (this._connString == String.Empty)
                     this._connString = this.GetConnectionString();
                 return this._connString;
             }
             set {
-                if (this._connString.CompareTo(value) != 0) 
+                if (this._connString.CompareTo(value) != 0)
                     this.CleanUp();
                 this._connString = value;
                 Logger.LogInformation(new EventId(4, "ConnectionString Set"), "A new connection string is set");
@@ -68,20 +68,20 @@ namespace ADOLib
                     throw (new Exception("Unable to open database connection"));
                 if (this._conn == null) {
                     this._conn = this.CreateConnection();
-                    this._conn.StateChange += ((o, e) => 
+                    this._conn.StateChange += ((o, e) =>
                         Logger.LogInformation("Connection state changed: {0}", _conn.State));
                     this._conn.ConnectionString = this.ConnectionString;
-                    Logger.LogInformation(new EventId(0, "Connection Get"), 
+                    Logger.LogInformation(new EventId(0, "Connection Get"),
                         string.Format("Initialize a new connection : {0}", _conn.State));
                 }
                 if (this._conn.State == ConnectionState.Closed) {
                     this._conn.Open();
                     if (this._conn.State != ConnectionState.Open)
                         throw (new Exception("Unable to open database connection"));
-                    Logger.LogInformation(new EventId(0, "Connection Get"), 
+                    Logger.LogInformation(new EventId(0, "Connection Get"),
                         string.Format("Open a connection : {0}", _conn.State));
                 }
-                Logger.LogInformation(new EventId(0, "Connection Get"), 
+                Logger.LogInformation(new EventId(0, "Connection Get"),
                     string.Format("Return a connection : {0}", _conn.State));
                 return this._conn;
             }
@@ -99,7 +99,7 @@ namespace ADOLib
             if (_conn?.State == ConnectionState.Open)
             {
                 _conn.Close();
-                Logger.LogInformation(new EventId(1, "CloseConnection"), 
+                Logger.LogInformation(new EventId(1, "CloseConnection"),
                     string.Format("Closed a connection : {0}", _conn.State));
             }
         }
@@ -108,196 +108,180 @@ namespace ADOLib
 
         #region ExecuteDataReader
 
-        public DataReaderResult ExecuteDataReader(string sql) =>
-            ExecuteDataReaderAsync(sql).Result;
-
-        /// <summary>
-        /// Note, the underlying DB connection will also closed
-        /// when the IDataReader is closed.
-        /// </summary>
-        public Task<DataReaderResult> ExecuteDataReaderAsync(string sql) {
+        public DataReaderResult ExecuteDataReader(string sql)
+        {
             using var cmd = CreateCommand();
             cmd.CommandText = ParseSQLParamName(sql);
-            return ExecuteDataReaderAsync(cmd);
+            return this.ExecuteDataReader(cmd);
         }
-
-        public DataReaderResult ExecuteDataReader(IDbCommand cmd) =>
-            ExecuteDataReaderAsync(cmd).Result;
 
         /// <summary>
         /// Note, the underlying DB connection will also closed
         /// when the IDataReader is closed.
         /// </summary>
-        public Task<DataReaderResult> ExecuteDataReaderAsync(IDbCommand cmd) {
+        public Task<DataReaderResult> ExecuteDataReaderAsync(string sql) =>
+            Task.Factory.StartNew(() => this.ExecuteDataReader(sql));
+
+        public DataReaderResult ExecuteDataReader(IDbCommand cmd)
+        {
             cmd.Connection ??= this.Connection;
-            var me = this;
-            return ((DbCommand)cmd).ExecuteReaderAsync()
-                .ContinueWith(r => new DataReaderResult(r.Result, me));
+            var rd = cmd.ExecuteReader();
+            return new DataReaderResult(rd, this);
         }
+
+        /// <summary>
+        /// Note, the underlying DB connection will also closed
+        /// when the IDataReader is closed.
+        /// </summary>
+        public Task<DataReaderResult> ExecuteDataReaderAsync(IDbCommand cmd) =>
+            Task.Factory.StartNew(() => this.ExecuteDataReader(cmd));
 
         #endregion ExecuteDataReader
 
         #region Execute
 
-        public int Execute(string sql) =>
-            ExecuteAsync(sql).Result;
-
-        public Task<int> ExecuteAsync(string sql) {
-            var cmd = CreateCommand();
+        public int Execute(string sql) 
+        {
+            using var cmd = CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.ExecuteAsync(cmd)
-                .ContinueWith(t =>
-                {
-                    cmd.Dispose();
-                    return t.Result;
-                });
+            return this.Execute(cmd);
         }
 
-        public int Execute(IDbCommand cmd) =>
-            ExecuteAsync(cmd).Result;
+        public Task<int> ExecuteAsync(string sql) =>
+            Task.Factory.StartNew(() => this.Execute(sql));
 
+        public int Execute(IDbCommand cmd)
+        {
+            cmd.Connection ??= this.Connection;
+            return cmd.ExecuteNonQuery();
+        }
 
         public Task<int> ExecuteAsync(IDbCommand cmd) {
             cmd.Connection ??= this.Connection;
             return ((DbCommand)cmd)
-                .ExecuteNonQueryAsync()
-                .ContinueWith(d => d.Result); ;
+                .ExecuteNonQueryAsync();
         }
 
-        public object? ExecuteFunction(IDbCommand cmd, DbType returnType) =>
-            ExecuteFunctionAsync(cmd, returnType).Result;
-
-        public Task<object?> ExecuteFunctionAsync(IDbCommand cmd, DbType returnType)
+        public object? ExecuteFunction(IDbCommand cmd, DbType returnType)
         {
             var rp = CreateReturnParameter("Return_Value", returnType);
             cmd.Parameters.Add(rp);
             cmd.Connection ??= this.Connection;
-            return ((DbCommand)cmd)
-                .ExecuteNonQueryAsync()
-                .ContinueWith(d => rp.Value);
+            cmd.ExecuteNonQuery();
+            return rp.Value;
         }
+
+        public Task<object?> ExecuteFunctionAsync(IDbCommand cmd, DbType returnType) =>
+            Task.Factory.StartNew(() => this.ExecuteFunction(cmd, returnType));
 
         #endregion Execute
 
         #region ExecuteDataSet
 
-        public DataSet ExecuteDataSet(string sql, string tableName) =>
-            ExecuteDataSetAsync(sql, tableName).Result;
-
         /// <summary>
         /// Execute a SELECT sql statement and return
         /// the data result as a table in a dataset.
         /// </summary>
-        public Task<DataSet> ExecuteDataSetAsync(string sql, string tableName) {
-            var cmd = this.CreateCommand();
+        public DataSet ExecuteDataSet(string sql, string tableName)
+        {
+            using var cmd = this.CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.ExecuteDataSetAsync(cmd, tableName)
-                .ContinueWith(t =>
-                {
-                    cmd.Dispose();
-                    return t.Result;
-                });
+            return this.ExecuteDataSet(cmd, tableName);
         }
 
-        public DataSet ExecuteDataSet(IDbCommand cmd, string tableName) =>
-            ExecuteDataSetAsync(cmd, tableName).Result;
+        public Task<DataSet> ExecuteDataSetAsync(string sql, string tableName) =>
+            Task.Factory.StartNew(() => this.ExecuteDataSet(sql, tableName));
 
         /// <summary>
         /// Execute a SELECT command and return
         /// the data result as a table in a dataset.
         /// </summary>
-        public Task<DataSet> ExecuteDataSetAsync(IDbCommand cmd, string tableName) {
+        public DataSet ExecuteDataSet(IDbCommand cmd, string tableName)
+        {
             var dataSet = new DataSet();
-            return this.ExecuteDataSetAsync(cmd, tableName, dataSet).
-                ContinueWith(t => dataSet);
+            this.ExecuteDataSet(cmd, tableName, dataSet);
+            return dataSet;
         }
 
-        public void ExecuteDataSet(string sql, string tableName, DataSet dataSet) =>
-            ExecuteDataSetAsync(sql, tableName, dataSet).Wait();
+        public Task<DataSet> ExecuteDataSetAsync(IDbCommand cmd, string tableName) =>
+            Task.Factory.StartNew(() => this.ExecuteDataSet(cmd, tableName));
 
         /// <summary>
         /// Execute a SELECT sql statement and return
         /// the data result as a table in an existing dataset.
         /// </summary>
-        public Task ExecuteDataSetAsync(string sql, string tableName, DataSet dataSet) {
-            var cmd = this.CreateCommand();
+        public void ExecuteDataSet(string sql, string tableName, DataSet dataSet)
+        {
+            using var cmd = this.CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.ExecuteDataSetAsync(cmd, tableName, dataSet)
-                .ContinueWith(t => cmd.Dispose());
+            this.ExecuteDataSet(cmd, tableName, dataSet);
         }
 
-        public void ExecuteDataSet(IDbCommand cmd, string tableName, DataSet dataSet) =>
-            ExecuteDataSetAsync(cmd, tableName, dataSet);
+        public Task ExecuteDataSetAsync(string sql, string tableName, DataSet dataSet) =>
+            Task.Factory.StartNew(() => this.ExecuteDataSet(sql, tableName, dataSet));
 
         /// <summary>
         /// Execute a SELECT command and return
         /// the data result as a table in an existing dataset.
         /// </summary>
-        public Task ExecuteDataSetAsync(IDbCommand cmd, string tableName, DataSet dataSet) {
+        public void ExecuteDataSet(IDbCommand cmd, string tableName, DataSet dataSet)
+        {
             cmd.Connection = this.Connection;
-            var da = this.CreateDataAdapter();
-            da.SelectCommand = (DbCommand) cmd;
+            using var da = this.CreateDataAdapter();
+            da.SelectCommand = (DbCommand)cmd;
             object l = dataSet.Tables.Contains(tableName) ? dataSet.Tables[tableName]! : dataSet;
             da.MissingSchemaAction = MissingSchemaAction.Add;
-            return Task.Run(() =>
-            {
-                lock (l) { da.Fill(dataSet, tableName); }
-                da.Dispose();
-            });
-
+            lock (l) { da.Fill(dataSet, tableName); }
         }
+
+        public Task ExecuteDataSetAsync(IDbCommand cmd, string tableName, DataSet dataSet) =>
+            Task.Factory.StartNew(() => this.ExecuteDataSet(cmd, tableName, dataSet));
 
         #endregion ExecuteDataSet
 
         #region ExecuteTable
 
-        public DataTable ExecuteTable(string sql, string tableName) =>
-            ExecuteTableAsync(sql, tableName).Result;
-
-        public Task<DataTable> ExecuteTableAsync(string sql, string tableName) {
-            var cmd = this.CreateCommand();
+        public DataTable ExecuteTable(string sql, string tableName)
+        {
+            using var cmd = this.CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.ExecuteTableAsync(cmd, tableName)
-                .ContinueWith(t =>
-                {
-                    cmd.Dispose();
-                    return t.Result;
-                });
+            return this.ExecuteTable(cmd, tableName);
         }
 
-        public DataTable ExecuteTable(IDbCommand cmd, string tableName) =>
-            ExecuteTableAsync(cmd, tableName).Result;
+        public Task<DataTable> ExecuteTableAsync(string sql, string tableName) =>
+            Task.Factory.StartNew(() => this.ExecuteTable(sql, tableName));
 
-        public Task<DataTable> ExecuteTableAsync(IDbCommand cmd, string tableName) {
+        public DataTable ExecuteTable(IDbCommand cmd, string tableName)
+        {
             var table = new DataTable();
-            return this.ExecuteTableAsync(cmd, table)
-                .ContinueWith(t => table);
+            this.ExecuteTable(cmd, table);
+            return table;
         }
 
-        public void ExecuteTable(string sql, DataTable table) =>
-            this.ExecuteTableAsync(sql, table).Wait();
+        public Task<DataTable> ExecuteTableAsync(IDbCommand cmd, string tableName) =>
+            Task.Factory.StartNew(() => this.ExecuteTable(cmd, tableName));
 
-        public Task ExecuteTableAsync(string sql, DataTable table) {
-            var cmd = this.CreateCommand();
+        public void ExecuteTable(string sql, DataTable table)
+        {
+            using var cmd = this.CreateCommand();
             cmd.CommandText = this.ParseSQLParamName(sql);
-            return this.ExecuteTableAsync(cmd, table)
-                .ContinueWith(t => cmd.Dispose());
+            this.ExecuteTable(cmd, table);
         }
 
-        public void ExecuteTable(IDbCommand cmd, DataTable table) =>
-            ExecuteTableAsync(cmd, table).Wait();
+        public Task ExecuteTableAsync(string sql, DataTable table) =>
+            Task.Factory.StartNew(() => this.ExecuteTable(sql, table));
 
-        public Task ExecuteTableAsync(IDbCommand cmd, DataTable table) {
+        public void ExecuteTable(IDbCommand cmd, DataTable table)
+        {
             cmd.Connection = this.Connection;
-            var da = this.CreateDataAdapter();
+            using var da = this.CreateDataAdapter();
             da.SelectCommand = (DbCommand)cmd;
             da.MissingSchemaAction = MissingSchemaAction.Add;
-            return Task.Run(() => 
-            {
-                lock (table) { da.Fill(table); }
-                da.Dispose();
-            });
+            lock (table) { da.Fill(table); }
         }
+
+        public Task ExecuteTableAsync(IDbCommand cmd, DataTable table) =>
+            Task.Factory.StartNew(() => this.ExecuteTableAsync(cmd, table));
 
         #endregion
         
